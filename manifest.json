@@ -1,0 +1,11 @@
+{
+  "name": "Bé Học Tiếng Anh",
+  "short_name": "Học Tiếng Anh",
+  "description": "Học tiếng Anh vừa học vừa chơi cho bé",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f6ff",
+  "theme_color": "#5b6cff",
+  "lang": "vi",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
