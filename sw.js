@@ -1,5 +1,5 @@
-const CACHE = 'be-hoc-v1';
-const FILES = ['./', 'index.html', 'css/style.css', 'js/data.js', 'js/app.js', 'icon.svg', 'manifest.json'];
+const CACHE = 'be-hoc-v2';
+const FILES = ['./', 'index.html', 'css/style.css', 'js/data.js', 'js/pro.js', 'js/app.js', 'icon.svg', 'manifest.json'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener('fetch', (e) => {

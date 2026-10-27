@@ -17,6 +17,9 @@ python3 -m http.server 8000   # hoặc: npx serve .
 - **Nhắc nhở hằng ngày**: thông báo theo giờ chọn, mục tiêu bài/ngày, chuỗi ngày học 🔥, xuất file lịch `.ics` lặp hằng ngày.
 - **Thưởng**: điểm, xu, sao (1-3 sao mỗi bước), cấp độ, huy hiệu, cửa hàng nhân vật.
 
+## Khoá cho người đi làm (tab 💼 Người đi làm)
+3 chuyên ngành: **Thu mua / Sản xuất**, **Xuất nhập khẩu**, **Phỏng vấn L1 công ty đa quốc gia**. Mỗi chuyên ngành có 12 thuật ngữ, 8 mẫu câu để nghe và nói theo, 4–5 tình huống hội thoại (chọn câu trả lời phù hợp nhất, có giải thích), 1 email công việc và bài kiểm tra. Nội dung nằm trong `js/pro.js`.
+
 ## Thêm nội dung
 Chỉnh `js/data.js`: thêm chủ đề vào mảng `TOPICS` theo cùng định dạng.
 

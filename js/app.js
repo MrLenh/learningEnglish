@@ -8,6 +8,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const pick = (a, n) => shuffle(a).slice(0, n);
 const topicOf = (id) => TOPICS.find((t) => t.id === id);
+const isPro = (t) => t.track === 'pro';
+const stepsOf = (t) => (isPro(t) ? STEPS_PRO : STEPS);
 
 /* ---------- Ngày tháng ---------- */
 const pad = (n) => String(n).padStart(2, '0');
@@ -20,7 +22,7 @@ const KEY = 'beHocTiengAnh.v1';
 const defaults = () => ({
   name: '', avatar: '🐶', ownedAvatars: ['🐶', '🐱'],
   points: 0, coins: 0, stars: 0, streak: 0, lastDay: '',
-  daily: { date: '', done: 0 }, goal: 3,
+  daily: { date: '', done: 0 }, goal: 3, track: 'kids',
   words: {}, progress: {}, saved: [], badges: [], spoken: 0,
   reminder: { on: false, time: '18:00', lastNotified: '' },
 });
@@ -93,7 +95,7 @@ function checkBadges() {
   give('points100', S.points >= 100); give('points500', S.points >= 500);
   give('stars10', S.stars >= 10); give('speaker', S.spoken >= 10);
   give('saver', S.saved.length >= 5);
-  give('master', TOPICS.some((t) => STEPS.every((s) => ((S.progress[t.id] || {})[s.key] || 0) >= 1)));
+  give('master', TOPICS.some((t) => stepsOf(t).every((s) => ((S.progress[t.id] || {})[s.key] || 0) >= 1)));
   return got;
 }
 function award({ topicId, stepKey, points, stars }) {
@@ -153,34 +155,38 @@ function viewWelcome() {
 
 /* ---------- Trang chủ ---------- */
 function viewHome() {
-  const due = dueWords().length, done = dailyDone(), goal = S.goal;
+  const due = dueWords().length, done = dailyDone(), goal = S.goal, pro = S.track === 'pro';
   const pct = Math.min(100, Math.round((done / goal) * 100));
-  view(`<section class="hero">
+  view(`<div class="tabs"><button data-t="kids" class="${pro ? '' : 'on'}">🧒 Bé học</button><button data-t="pro" class="${pro ? 'on' : ''}">💼 Người đi làm</button></div>
+    <section class="hero">
       <div><h1>Xin chào, ${esc(S.name)}! ${S.avatar}</h1>
-      <p>${done >= goal ? 'Giỏi quá! Hôm nay bạn đã hoàn thành mục tiêu 🎉' : 'Hôm nay mình học một chút nhé!'}</p></div>
+      <p>${done >= goal ? 'Giỏi quá! Hôm nay bạn đã hoàn thành mục tiêu 🎉' : pro ? 'Luyện tiếng Anh công việc 10 phút mỗi ngày nhé!' : 'Hôm nay mình học một chút nhé!'}</p></div>
     </section>
     <section class="card goal"><div class="row"><b>🎯 Mục tiêu hôm nay</b><span>${Math.min(done, goal)}/${goal} bài</span></div>
       <div class="bar"><i style="width:${pct}%"></i></div></section>
     ${due ? `<a class="card review" href="#/review"><span class="big">🔁</span><span><b>Ôn tập hôm nay</b><small>${due} từ đang chờ bạn nhớ lại</small></span><span class="go">›</span></a>` : ''}
-    <h2>Chọn chủ đề</h2>
-    <div class="grid">${TOPICS.map((t) => {
-      const p = S.progress[t.id] || {}; const got = STEPS.reduce((a, s) => a + (p[s.key] || 0), 0);
+    <h2>${pro ? 'Chọn chuyên ngành' : 'Chọn chủ đề'}</h2>
+    <div class="grid">${TOPICS.filter((t) => isPro(t) === pro).map((t) => {
+      const p = S.progress[t.id] || {}, st = stepsOf(t); const got = st.reduce((a, s) => a + (p[s.key] || 0), 0);
       return `<a class="topic" style="--c:${t.color}" href="#/topic/${t.id}"><span class="em">${t.emoji}</span><b>${t.name}</b>
-        <div class="bar sm"><i style="width:${Math.round((got / (STEPS.length * 3)) * 100)}%"></i></div><small>⭐ ${got}/${STEPS.length * 3}</small></a>`;
+        <div class="bar sm"><i style="width:${Math.round((got / (st.length * 3)) * 100)}%"></i></div><small>⭐ ${got}/${st.length * 3}</small></a>`;
     }).join('')}</div>`, 'home');
+  app.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => { S.track = b.dataset.t; save(); viewHome(); });
 }
 
 /* ---------- Trang chủ đề ---------- */
 function viewTopic(id) {
   const t = topicOf(id); if (!t) return (location.hash = '#/');
-  const p = S.progress[id] || {};
+  const p = S.progress[id] || {}, steps = stepsOf(t), pro = isPro(t);
+  if (S.track !== t.track) { S.track = t.track || 'kids'; save(); }
   view(`${back('#/')}
-    <section class="topichead" style="--c:${t.color}"><span class="big">${t.emoji}</span><div><h1>${t.name}</h1><p>${t.words.length} từ vựng • 1 bài đọc</p></div></section>
-    <div class="steps">${STEPS.map((s, i) => `<a class="step" style="--c:${t.color}" href="#/${s.key}/${id}">
+    <section class="topichead" style="--c:${t.color}"><span class="big">${t.emoji}</span><div><h1>${t.name}</h1><p>${t.words.length} ${pro ? 'thuật ngữ' : 'từ vựng'} • ${pro ? `${t.phrases.length} mẫu câu • ${t.dialogs.length} tình huống • 1 email` : '1 bài đọc'}</p></div></section>
+    <div class="steps">${steps.map((s, i) => `<a class="step" style="--c:${t.color}" href="#/${s.key}/${id}">
       <span class="num">${i + 1}</span><span class="em">${s.emoji}</span><span class="txt"><b>${s.name}</b><small>${s.desc}</small></span>
       <span class="st">${stars3(p[s.key] || 0)}</span></a>`).join('')}</div>
-    <h2>Từ vựng trong chủ đề</h2>
-    <div class="wordlist">${t.words.map(wordRow).join('')}</div>`, 'home');
+    <h2>${pro ? 'Thuật ngữ trong chuyên ngành' : 'Từ vựng trong chủ đề'}</h2>
+    <div class="wordlist">${t.words.map(wordRow).join('')}</div>
+    ${pro ? `<h2>Mẫu câu thường dùng</h2><div class="wordlist">${t.phrases.map((ph) => `<div class="wrow"><span class="txt"><b>${ph.en}</b><small>${ph.vi}</small></span><button class="ibtn" data-say="${esc(ph.en)}" aria-label="Nghe">🔊</button></div>`).join('')}</div>` : ''}`, 'home');
   bindWordRows();
 }
 function wordRow(w) {
@@ -219,7 +225,8 @@ function finish({ topicId, stepKey, correct, total, again, extraPoints = 0, titl
 /* ---------- Bộ câu hỏi trắc nghiệm dùng chung ---------- */
 function distract(word, n, sameTopic = true) {
   const pool = ALL_WORDS.filter((w) => w.id !== word.id && (!sameTopic || w.topic === word.topic));
-  const extra = ALL_WORDS.filter((w) => w.id !== word.id && !pool.includes(w));
+  const tp = isPro(topicOf(word.topic));
+  const extra = ALL_WORDS.filter((w) => w.id !== word.id && !pool.includes(w) && isPro(topicOf(w.topic)) === tp);
   return pick(pool, n).concat(pick(extra, Math.max(0, n - pool.length)));
 }
 const Q = {
@@ -232,9 +239,25 @@ const Q = {
   en: (w) => ({ word: w, prompt: `<div class="qw">${w.vi}</div><p>Từ tiếng Anh là gì?</p>`,
     opts: shuffle([w, ...distract(w, 3)]).map((x) => ({ html: x.en, ok: x.id === w.id })) }),
 };
+Q.listenVi = (w) => ({ word: w, speak: w.en, prompt: '<button class="speakbig" data-sp>🔊</button><p>Nghe và chọn nghĩa đúng</p>',
+  opts: shuffle([w, ...distract(w, 3)]).map((x) => ({ html: x.vi, ok: x.id === w.id })) });
+Q.blank = (w) => {
+  const re = new RegExp(w.en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  if (!re.test(w.ex)) return Q.en(w);
+  return { word: w, speak: w.ex, prompt: `<div class="qw sm">${w.ex.replace(re, '_____')}</div><p>${w.exVi}</p>`,
+    opts: shuffle([w, ...distract(w, 3)]).map((x) => ({ html: x.en, ok: x.id === w.id })) };
+};
+Q.phrase = (ph, t) => ({ speak: ph.en, long: true, prompt: '<button class="speakbig" data-sp>🔊</button><p>Nghe câu và chọn nghĩa đúng</p>',
+  opts: shuffle([ph, ...pick(t.phrases.filter((x) => x !== ph), 3)]).map((x) => ({ html: x.vi, ok: x === ph })) });
+Q.dialog = (d) => {
+  const last = d.lines[d.lines.length - 1][1];
+  return { speak: last, say: d.o[d.a], why: d.why, long: true,
+    prompt: `<div class="scene">🎬 ${d.scene}</div><div class="chat">${d.lines.map((l) => `<div class="bub"><b>${l[0]}</b>${l[1]}</div>`).join('')}</div><p>Bạn trả lời thế nào?</p>`,
+    opts: shuffle(d.o.map((x, k) => ({ html: x, ok: k === d.a }))) };
+};
 function mixedQuestions(words, n) {
-  const kinds = ['listen', 'emoji', 'vi', 'en'];
-  return shuffle(words).slice(0, n).map((w, i) => Q[kinds[i % kinds.length]](w));
+  const kids = ['listen', 'emoji', 'vi', 'en'], pro = ['listenVi', 'vi', 'blank', 'en'];
+  return shuffle(words).slice(0, n).map((w, i) => { const k = isPro(topicOf(w.topic)) ? pro : kids; return Q[k[i % k.length]](w); });
 }
 
 function runQuiz({ questions, topicId, stepKey, title, again, srs = true }) {
@@ -244,7 +267,7 @@ function runQuiz({ questions, topicId, stepKey, title, again, srs = true }) {
     view(`<div class="quizhead"><a class="x" href="${topicId ? '#/topic/' + topicId : '#/'}">✕</a>
       <div class="bar"><i style="width:${(i / questions.length) * 100}%"></i></div><span>${i + 1}/${questions.length}</span></div>
       <section class="card center q"><div class="prompt">${q.prompt}</div>
-      <div class="opts ${q.grid ? 'grid2' : ''}">${q.opts.map((o, k) => `<button class="opt" data-k="${k}">${o.html}</button>`).join('')}</div>
+      <div class="opts ${q.grid ? 'grid2' : ''} ${q.long ? 'long' : ''}">${q.opts.map((o, k) => `<button class="opt" data-k="${k}">${o.html}</button>`).join('')}</div>
       <div class="fb" id="fb"></div></section>`, 'hide');
     app.querySelectorAll('[data-sp]').forEach((b) => b.onclick = () => say(q.speak));
     if (q.speak) setTimeout(() => say(q.speak), 350);
@@ -254,8 +277,8 @@ function runQuiz({ questions, topicId, stepKey, title, again, srs = true }) {
       if (!o.ok) b.classList.add('wrong'); else correct++;
       if (srs && q.word) srsTouch(q.word.id, o.ok);
       sfx(o.ok ? 'good' : 'bad');
-      if (q.word) say(q.word.en);
-      $('#fb').innerHTML = `<div class="${o.ok ? 'ok' : 'no'}">${o.ok ? 'Đúng rồi! 🎉' : 'Chưa đúng, cố lên! 💪'}${q.word ? `<small>${q.word.emoji} ${q.word.en} = ${q.word.vi}</small>` : ''}</div>
+      const sp = q.word ? q.word.en : q.say; if (sp) say(sp);
+      $('#fb').innerHTML = `<div class="${o.ok ? 'ok' : 'no'}">${o.ok ? 'Đúng rồi! 🎉' : 'Chưa đúng, cố lên! 💪'}${q.word ? `<small>${q.word.emoji} ${q.word.en} = ${q.word.vi}</small>` : ''}${q.why ? `<small>💡 ${q.why}</small>` : ''}</div>
         <button class="btn" id="nx">${i + 1 < questions.length ? 'Tiếp tục ➜' : 'Xem kết quả 🏁'}</button>`;
       $('#nx').onclick = () => { i++; if (i < questions.length) show(); else { save(); finish({ topicId, stepKey, correct, total: questions.length, again, title }); } };
     });
@@ -271,7 +294,7 @@ function viewLearn(id) {
     view(`<div class="quizhead"><a class="x" href="#/topic/${id}">✕</a><div class="bar"><i style="width:${(i / t.words.length) * 100}%"></i></div><span>${i + 1}/${t.words.length}</span></div>
       <section class="card center flash" style="--c:${t.color}">
         <button class="ibtn heart ${S.saved.includes(w.id) ? 'on' : ''}" id="sv">${S.saved.includes(w.id) ? '❤️' : '🤍'}</button>
-        <div class="fe">${w.emoji}</div><div class="fw">${w.en}</div>
+        <div class="fe">${w.emoji}</div><div class="fw ${w.en.length > 12 ? 'sm' : ''}">${w.en}</div>
         <div class="row c"><button class="btn small" id="sp">🔊 Nghe</button><button class="btn small ghost" id="sl">🐢 Chậm</button></div>
         <div id="more" class="more">${revealed ? moreHtml(w) : '<button class="btn ghost" id="rv">Xem nghĩa 👀</button>'}</div></section>
       <div class="actions"><button class="btn ghost" id="pv" ${i === 0 ? 'disabled' : ''}>← Trước</button><button class="btn" id="nx">${i + 1 < t.words.length ? 'Từ tiếp ➜' : 'Hoàn thành 🏁'}</button></div>`, 'hide');
@@ -284,7 +307,7 @@ function viewLearn(id) {
     $('#nx').onclick = () => {
       if (!S.words[w.id]) S.words[w.id] = { box: 1, due: addDays(1) };
       revealed = false; i++;
-      if (i < t.words.length) show(); else { save(); finish({ topicId: id, stepKey: 'learn', correct: t.words.length, total: t.words.length, title: 'Bạn đã học xong từ mới!', again: () => viewLearn(id) }); }
+      if (i < t.words.length) show(); else { save(); finish({ topicId: id, stepKey: 'learn', correct: t.words.length, total: t.words.length, title: isPro(t) ? 'Bạn đã học xong thuật ngữ!' : 'Bạn đã học xong từ mới!', again: () => viewLearn(id) }); }
     };
     setTimeout(hear, 300);
   };
@@ -296,29 +319,36 @@ function viewLearn(id) {
 /* ---------- Bước 2: Luyện nghe ---------- */
 function viewListen(id) {
   const t = topicOf(id);
-  const go = () => runQuiz({ questions: shuffle(t.words).map(Q.listen), topicId: id, stepKey: 'listen', title: 'Luyện nghe: ' + t.name, again: go });
+  const qs = () => (isPro(t) ? shuffle(shuffle(t.words).slice(0, 6).map(Q.listenVi).concat(shuffle(t.phrases).slice(0, 4).map((ph) => Q.phrase(ph, t)))) : shuffle(t.words).map(Q.listen));
+  const go = () => runQuiz({ questions: qs(), topicId: id, stepKey: 'listen', title: 'Luyện nghe: ' + t.name, again: go });
   go();
 }
 
 /* ---------- Bước 3: Luyện phát âm ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const norm = (s) => s.toLowerCase().replace(/[^a-z ]/g, '').trim();
+const toks = (s) => norm(s).split(/\s+/).filter(Boolean);
+function matches(alts, target) {
+  const tt = toks(target);
+  if (tt.length === 1) return alts.some((a) => toks(a).includes(tt[0]));
+  return alts.some((a) => { const at = new Set(toks(a)); return tt.filter((x) => at.has(x)).length / tt.length >= 0.75; });
+}
 function viewSpeak(id) {
-  const t = topicOf(id); let i = 0, ok = 0, tries = 0, rec = null;
+  const t = topicOf(id), items = isPro(t) ? t.phrases : t.words, phr = isPro(t); let i = 0, ok = 0, tries = 0, rec = null;
   cleanup = () => { try { rec && rec.abort(); } catch (e) { /* bỏ qua */ } };
-  const next = () => { i++; tries = 0; if (i < t.words.length) show(); else { save(); finish({ topicId: id, stepKey: 'speak', correct: ok, total: t.words.length, title: 'Luyện phát âm: ' + t.name, again: () => viewSpeak(id) }); } };
+  const next = () => { i++; tries = 0; if (i < items.length) show(); else { save(); finish({ topicId: id, stepKey: 'speak', correct: ok, total: items.length, title: 'Luyện phát âm: ' + t.name, again: () => viewSpeak(id) }); } };
   const show = () => {
-    const w = t.words[i];
-    view(`<div class="quizhead"><a class="x" href="#/topic/${id}">✕</a><div class="bar"><i style="width:${(i / t.words.length) * 100}%"></i></div><span>${i + 1}/${t.words.length}</span></div>
-      <section class="card center flash" style="--c:${t.color}"><div class="fe">${w.emoji}</div><div class="fw">${w.en}</div><div class="muted">${w.vi}</div>
+    const w = items[i];
+    view(`<div class="quizhead"><a class="x" href="#/topic/${id}">✕</a><div class="bar"><i style="width:${(i / items.length) * 100}%"></i></div><span>${i + 1}/${items.length}</span></div>
+      <section class="card center flash" style="--c:${t.color}"><div class="fe">${phr ? '🗣️' : w.emoji}</div><div class="fw ${phr ? 'phrase' : ''}">${w.en}</div><div class="muted">${w.vi}</div>
       <div class="row c"><button class="btn small" id="sp">🔊 Nghe mẫu</button></div>
-      <div class="micwrap">${SR ? '<button class="mic" id="mic" aria-label="Nói">🎤</button><p id="ms">Bấm micro rồi nói to từ này nhé!</p>'
+      <div class="micwrap">${SR ? '<button class="mic" id="mic" aria-label="Nói">🎤</button><p id="ms">Bấm micro rồi nói to ' + (phr ? 'cả câu' : 'từ') + ' này nhé!</p>'
         : '<p class="muted">Trình duyệt này chưa hỗ trợ nhận diện giọng nói (hãy dùng Chrome hoặc Safari để chấm điểm tự động). Bạn nghe mẫu rồi tự nói theo nhé!</p><button class="btn" id="self">Mình nói xong rồi ✅</button>'}</div>
       <div id="fb" class="fb"></div></section>
       <div class="actions"><button class="btn ghost" id="skip">Bỏ qua</button></div>`, 'hide');
     const done = (good, text) => {
       if (good) { ok++; S.spoken++; sfx('good'); } else sfx('bad');
-      $('#fb').innerHTML = `<div class="${good ? 'ok' : 'no'}">${text}</div><button class="btn" id="nx">${i + 1 < t.words.length ? 'Từ tiếp ➜' : 'Xem kết quả 🏁'}</button>`;
+      $('#fb').innerHTML = `<div class="${good ? 'ok' : 'no'}">${text}</div><button class="btn" id="nx">${i + 1 < items.length ? 'Tiếp ➜' : 'Xem kết quả 🏁'}</button>`;
       $('#nx').onclick = next; const m = $('.micwrap'); if (m) m.style.display = 'none';
     };
     $('#sp').onclick = () => say(w.en, 0.7); setTimeout(() => say(w.en, 0.7), 300);
@@ -331,9 +361,9 @@ function viewSpeak(id) {
       mic.classList.add('live'); ms.textContent = 'Đang nghe bạn nói…';
       rec.onresult = (e) => {
         const alts = Array.from(e.results[0]).map((a) => norm(a.transcript));
-        const hit = alts.some((a) => a === w.en || a.split(' ').includes(w.en));
+        const hit = matches(alts, w.en);
         if (hit) done(true, 'Phát âm rất tốt! 🎉');
-        else { tries++; ms.textContent = `Mình nghe được: “${alts[0] || '…'}”. ${tries >= 2 ? '' : 'Thử lại nhé!'}`; if (tries >= 2) done(false, `Không sao! Từ đúng là “${w.en}”. Lần sau sẽ tốt hơn 💪`); }
+        else { tries++; ms.textContent = `Mình nghe được: “${alts[0] || '…'}”. ${tries >= 2 ? '' : 'Thử lại nhé!'}`; if (tries >= 2) done(false, `Không sao! ${phr ? 'Câu' : 'Từ'} đúng là “${w.en}”. Lần sau sẽ tốt hơn 💪`); }
       };
       rec.onerror = (e) => { ms.textContent = e.error === 'not-allowed' ? 'Hãy cho phép dùng micro để luyện nói nhé.' : 'Mình chưa nghe rõ, thử lại nhé!'; };
       rec.onend = () => mic.classList.remove('live');
@@ -347,7 +377,7 @@ function viewSpeak(id) {
 function viewRead(id) {
   const t = topicOf(id), r = t.reading; let showVi = false;
   view(`${back('#/topic/' + id)}
-    <section class="card read"><h1>📖 ${r.title}</h1>
+    <section class="card read"><h1>${isPro(t) ? '📧' : '📖'} ${r.title}</h1>
       <div class="row"><button class="btn small" id="all">🔊 Nghe cả bài</button><button class="btn small ghost" id="tr">🇻🇳 Dịch</button></div>
       <p class="tip">Chạm vào từng câu để nghe nhé!</p>
       <div class="passage">${r.text.map((s, k) => `<button class="sent" data-k="${k}">${s}</button>`).join(' ')}</div>
@@ -363,10 +393,20 @@ function viewRead(id) {
   };
 }
 
-/* ---------- Bước 5: Bài kiểm tra ---------- */
+/* ---------- Hội thoại tình huống (người đi làm) ---------- */
+function viewDialog(id) {
+  const t = topicOf(id);
+  const go = () => runQuiz({ srs: false, questions: shuffle(t.dialogs).map(Q.dialog), topicId: id, stepKey: 'dialog', title: 'Hội thoại: ' + t.name, again: go });
+  go();
+}
+
+/* ---------- Bài kiểm tra ---------- */
 function viewTest(id) {
   const t = topicOf(id);
-  const go = () => runQuiz({ questions: mixedQuestions(t.words.concat(t.words), 10), topicId: id, stepKey: 'test', title: 'Kiểm tra: ' + t.name, again: go });
+  const build = () => (isPro(t)
+    ? shuffle(mixedQuestions(t.words, 6).concat(shuffle(t.dialogs).slice(0, 4).map(Q.dialog)))
+    : mixedQuestions(t.words.concat(t.words), 10));
+  const go = () => runQuiz({ questions: build(), topicId: id, stepKey: 'test', title: 'Kiểm tra: ' + t.name, again: go });
   go();
 }
 
@@ -471,7 +511,7 @@ function checkReminder() {
 /* ---------- Điều hướng ---------- */
 const routes = {
   '': viewHome, topic: viewTopic, learn: viewLearn, listen: viewListen, speak: viewSpeak,
-  read: viewRead, test: viewTest, review: viewReview, saved: viewSaved, rewards: viewRewards, settings: viewSettings,
+  read: viewRead, dialog: viewDialog, test: viewTest, review: viewReview, saved: viewSaved, rewards: viewRewards, settings: viewSettings,
 };
 function route() {
   if (cleanup) { cleanup(); cleanup = null; }
